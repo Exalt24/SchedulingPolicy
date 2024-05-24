@@ -19,12 +19,94 @@ class _SJFState extends State<SJF> {
   bool isGenerating = false;
   int TimerCounter =0;
   bool isPaused = true;
+  int _freeMemory = 1000;
   MemoryManager memoryManager = MemoryManager(
     memoryBlocks: List.generate(100, (index) => MemoryBlock(startAddress: index * 10, size: 10)),
     pageSize: 10,
     totalMemory: 1000,
-    workingSetSize: 5,
   );
+
+  late int pageSize = 0;
+  late int totalMemory = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(Duration.zero, () {
+      _showMemoryConfigurationDialog();
+    });
+  }
+
+  void _showMemoryConfigurationDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Memory Configuration'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                decoration: const InputDecoration(labelText: 'Page Size'),
+                onChanged: (value) {
+                  pageSize = int.parse(value);
+                },
+              ),
+              TextField(
+                decoration: const InputDecoration(labelText: 'Total Memory'),
+                onChanged: (value) {
+                  totalMemory = int.parse(value);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                // If no value or invalid value is entered, show an alert message
+                if (pageSize == 0 || totalMemory == 0 || totalMemory % pageSize != 0 || pageSize > totalMemory || pageSize < 0 || totalMemory < 0) {
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        title: const Text('Invalid Input'),
+                        content: const Text('Please enter valid values for Page Size and Total Memory. Total Memory must be a multiple of Page Size.'),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                            child: const Text('OK'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                  return;
+                }
+                setState(() {
+                  memoryManager = MemoryManager(
+                    memoryBlocks: List.generate(totalMemory ~/ pageSize, (index) => MemoryBlock(startAddress: index * pageSize, size: pageSize)),
+                    pageSize: pageSize,
+                    totalMemory: totalMemory,
+                  );
+                  _freeMemory = totalMemory;
+                });
+                Navigator.of(context).pop();
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   void generateRandomly(){
     Random random = Random();
@@ -45,17 +127,27 @@ class _SJFState extends State<SJF> {
     //int burstTime = 4;
     int memorySize = random.nextInt(99)+1; // Random memory size between 0 and 99
     int priority = random.nextInt(3); // Random priority between 0 and 2
-    String status = (processNum==0)?'Running':'Ready'; // Initial status is 'Ready'
+    String status = 'Job Queue';
     List<Pagee> pages = [];
     // Create a new Process object with the generated values
+
+    if (memorySize < _freeMemory && memoryManager.jobQueue.isNotEmpty) {
+      return;
+    }
+
     Process newProcess = Process(processId, arrivalTime, memorySize, priority, burstTime: burstTime, status: status, pages: pages);
+
+    memoryManager.allocateProcess(newProcess);
 
     // Add the new process to the list
     setState(() {
+      _freeMemory = memoryManager.memoryBlocks.where((block) => block.isFree).length * memoryManager.pageSize;
       processNum++;
       processes.add(newProcess);
     });
   }
+
+
 
 
   void _startTimer(){
@@ -63,20 +155,16 @@ class _SJFState extends State<SJF> {
       if (!isPaused) {
 
       TimerCounter++;
-
       //change number if want slower
       if (TimerCounter % 2 == 0){
+
+        ShortestJobFirst(processes, memoryManager);
         setState(() {
           _counter++;
-
           if(isGenerating){
             generateRandomly();
           }
-
-          ShortestJobFirst(processes);
-
-
-
+          _freeMemory = memoryManager.memoryBlocks.where((block) => block.isFree).length * memoryManager.pageSize;
         });
       }
     }
@@ -92,13 +180,23 @@ class _SJFState extends State<SJF> {
     }
   }
 
+  List<Map<String, String>> generatePageTableData() {
+    List<Map<String, String>> pageTableData = [];
+    for (var entry in memoryManager.pageTable.entries) {
+      pageTableData.add({
+        'virtualPageNumber': entry.virtualPageNumber.toString(),
+        'physicalFrameNumber': entry.physicalFrameNumber != null ? entry.physicalFrameNumber.toString() : 'N/A',
+        'inMemory': entry.inMemory ? 'Yes' : 'No',
+      });
+    }
+    return pageTableData;
+  }
+
   //if manual
   void addCounter(){
     setState(() {
       _counter++;
-      ShortestJobFirst(processes);
-
-
+      ShortestJobFirst(processes, memoryManager);
     });
   }
 
@@ -111,7 +209,7 @@ class _SJFState extends State<SJF> {
   @override
   Widget build(BuildContext context) {
     Size size = MediaQuery.of(context).size;
-    
+    List<Map<String, String>> pageTableData = generatePageTableData();
     return Scaffold(
       body: Stack(
         //fit: StackFit.expand,
@@ -183,7 +281,8 @@ class _SJFState extends State<SJF> {
                               children: [
                                 SizedBox(width: 80),
                                 Text(
-                                  'CPU Time: ${_counter.toString()} s ',
+                                    'CPU Time: ${_counter.toString()} s'
+                                        '   Free Memory: $_freeMemory KB',
                                   style: TextStyle(color: Colors.white, fontSize: 30),
                                 ),
                                 Spacer(),
@@ -292,40 +391,137 @@ class _SJFState extends State<SJF> {
                                 SizedBox(width: 80),
                               ],
                             ),
-                            SizedBox(height: 20),
-                            Padding(
-                              padding:EdgeInsets.only(bottom:10, left:250, right:250),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  tableTitle("Process ID"),
-                                  tableTitle("Burst Time"),
-                                  tableTitle("Arrival Time"),
-                                  tableTitle("Memory Size"),
-                                  tableTitle("Status"),
-                                ],
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            Container(
-                              height: height * 0.78,
-                              child: LayoutBuilder(
-                                builder: (context, constraints){
-                                  double width = constraints.maxWidth;
-                                  double height = constraints.maxHeight;
-                                  //print('$width, $height');
-                                  return Expanded(
-                                    child: SingleChildScrollView(
-                                      child: Column(
-                                        children: processes.map((process) {
-                                          return processContainers(process);
-                                        }).toList(),
+                            Padding(padding: EdgeInsets.only(top: 50)),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+
+
+                              children: [
+                                SizedBox(height: 20),
+                                Padding(
+                                  padding:EdgeInsets.only(left:20, right:40),
+                                  child: Column(
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          tableTitle("Page Number"),
+                                          tableTitle("Frame Number"),
+                                          tableTitle("In Memory"),
+                                        ],
                                       ),
-                                    ),
-                                  );
-                                }
-                              ),
-                            )
+                                      SizedBox(height: 5),
+                                      Container(
+                                        height: size.height * 0.5,
+                                        child: LayoutBuilder(
+                                            builder: (context, constraints){
+                                              double width = constraints.maxWidth;
+                                              double height = constraints.maxHeight;
+                                              //print('$width, $height');
+                                              return Container(
+                                                child: SingleChildScrollView(
+                                                  child: Column(
+                                                    children: pageTableData.map((entry)
+                                                    {
+                                                      return Padding(
+                                                        padding: EdgeInsets.only(bottom:10),
+                                                        child: Row(
+                                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                          children: [
+                                                            singleProcessContainers(entry['virtualPageNumber']!, 'N/A'),
+                                                            singleProcessContainers(entry['physicalFrameNumber']!, 'N/A'),
+                                                            singleProcessContainers(entry['inMemory']!, 'N/A'),
+                                                          ],
+                                                        ),
+                                                      );
+                                                    }).toList(),
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                        ),
+                                      )
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(height: 20),
+                                Padding(
+                                  padding:EdgeInsets.only(left:40, right:20),
+                                  child: Column(
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          tableTitle("Process ID"),
+                                          tableTitle("Burst Time"),
+                                          tableTitle("Arrival Time"),
+                                          tableTitle("Memory Size"),
+                                          tableTitle("Status"),
+                                        ],
+                                      ),
+                                      SizedBox(height: 5),
+                                      Container(
+                                        height: size.height * 0.5,
+                                        child: LayoutBuilder(
+                                            builder: (context, constraints){
+                                              double width = constraints.maxWidth;
+                                              double height = constraints.maxHeight;
+                                              //print('$width, $height');
+                                              return  Container(
+                                                child: SingleChildScrollView(
+                                                  child: Column(
+                                                    children: processes.map((process)
+                                                    {
+                                                      return Padding(
+                                                        padding: EdgeInsets.only(bottom:5),
+                                                        child: Row(
+                                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                          children: [
+                                                            singleProcessContainers(process.processId, process.status),
+                                                            singleProcessContainers(process.burstTime.toString(), process.status),
+                                                            singleProcessContainers(process.arrivalTime.toString(), process.status),
+                                                            singleProcessContainers(process.memorySize.toString(), process.status),
+                                                            singleProcessContainers(process.status, process.status),
+                                                          ],
+                                                        ),
+                                                      );
+                                                    }).toList(),
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                        ),
+                                      ),
+                                      SizedBox(height: 20),
+                                      Container(
+                                        height: 100,
+                                        width: 500,
+                                        child: Stack(
+                                          children: memoryManager.memoryBlocks.map((block) {
+                                            return Positioned(
+                                              left: block.startAddress.toDouble(),
+                                              child: Container(
+                                                width: block.size.toDouble(),
+                                                height: 100,
+                                                decoration: BoxDecoration(
+                                                  color: block.isFree ? Colors.green : Colors.red,
+                                                  border: Border.all(
+                                                    color: Colors.white,
+                                                    width: 2.0, // Adjust the border width as needed
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
+                                ),
+
+                              ],
+                            ),
                           ],
                         ),
                       );
