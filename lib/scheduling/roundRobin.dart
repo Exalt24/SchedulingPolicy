@@ -239,13 +239,13 @@ class _RoundRobinState extends State<RoundRobin> {
 
 
       TimerCounter++;
-      if (memoryManager.memoryBlocks.where((block) => block.isFree).isNotEmpty && memoryManager.partiallyAllocatedProcesses.isNotEmpty) {
-        memoryManager.checkForFreeMemoryThenAllocateRemainingMemory();
-      }
-      memoryManager.checkForFreeMemoryThenAllocateFromJobQueue("RoundRobin");
+
       //change number if want slower
       if (TimerCounter % 2 == 0){
-
+        if (memoryManager.memoryBlocks.where((block) => block.isFree).isNotEmpty && memoryManager.partiallyAllocatedProcesses.isNotEmpty) {
+          memoryManager.checkForFreeMemoryThenAllocateRemainingMemory();
+        }
+        memoryManager.checkForFreeMemoryThenAllocateFromJobQueue("RoundRobin");
         RoundRobinAlgorithm(quantum);
         setState(() {
           _counter++;

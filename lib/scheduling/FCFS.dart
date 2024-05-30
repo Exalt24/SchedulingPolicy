@@ -162,12 +162,12 @@ class _FCFSState extends State<FCFS> {
     _timer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
       if (!isPaused) {
       TimerCounter++;
-      if (memoryManager.memoryBlocks.where((block) => block.isFree).isNotEmpty && memoryManager.partiallyAllocatedProcesses.isNotEmpty) {
-        memoryManager.checkForFreeMemoryThenAllocateRemainingMemory();
-      }
-      memoryManager.checkForFreeMemoryThenAllocateFromJobQueue("FirstComeFirstServed");
-      if (TimerCounter % 2 == 0){
 
+      if (TimerCounter % 2 == 0){
+        if (memoryManager.memoryBlocks.where((block) => block.isFree).isNotEmpty && memoryManager.partiallyAllocatedProcesses.isNotEmpty) {
+          memoryManager.checkForFreeMemoryThenAllocateRemainingMemory();
+        }
+        memoryManager.checkForFreeMemoryThenAllocateFromJobQueue("FirstComeFirstServed");
         FirstComeFirstServed(processes, memoryManager);
         setState(() {
           _counter++;
