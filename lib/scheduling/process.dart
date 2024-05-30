@@ -159,10 +159,19 @@ class MemoryManager with ChangeNotifier {
   }
 
   void checkForFreeMemoryThenAllocateRemainingMemory() {
+
     Process process = partiallyAllocatedProcesses.first;
     var freeFrames = memoryBlocks.where((block) => block.isFree).toList();
     if (freeFrames.isNotEmpty) {
       allocateRemainingMemory(process);
+    }
+  }
+
+  void checkForFreeMemoryThenAllocateFromJobQueue(String policy) {
+    if (jobQueue.isEmpty || memoryBlocks.where((block) => block.isFree).isEmpty) return;
+    var freeFrames = memoryBlocks.where((block) => block.isFree).toList();
+    if (freeFrames.isNotEmpty) {
+      allocateFromJobQueue(policy);
     }
   }
 

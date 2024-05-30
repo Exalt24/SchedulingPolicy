@@ -115,10 +115,10 @@ class _PrioritySchedState extends State<PrioritySched> {
     _timer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
       if (!isPaused) {
         TimerCounter++;
-        if (memoryManager.partiallyAllocatedProcesses.isNotEmpty) {
+        if (memoryManager.memoryBlocks.where((block) => block.isFree).isNotEmpty && memoryManager.partiallyAllocatedProcesses.isNotEmpty) {
           memoryManager.checkForFreeMemoryThenAllocateRemainingMemory();
         }
-
+        memoryManager.checkForFreeMemoryThenAllocateFromJobQueue("PriorityScheduling");
         //change number if want slower
         if (TimerCounter % 2 == 0) {
 

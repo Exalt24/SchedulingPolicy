@@ -154,9 +154,10 @@ class _SJFState extends State<SJF> {
       if (!isPaused) {
 
       TimerCounter++;
-      if (memoryManager.partiallyAllocatedProcesses.isNotEmpty) {
+      if (memoryManager.memoryBlocks.where((block) => block.isFree).isNotEmpty && memoryManager.partiallyAllocatedProcesses.isNotEmpty) {
         memoryManager.checkForFreeMemoryThenAllocateRemainingMemory();
       }
+      memoryManager.checkForFreeMemoryThenAllocateFromJobQueue("ShortestJobFirst");
       //change number if want slower
       if (TimerCounter % 2 == 0){
 
@@ -253,7 +254,7 @@ class _SJFState extends State<SJF> {
                             ),
                             Spacer(),
                             Text(
-                              'Shortes Job First Scheduling',
+                              'Shortest Job First Scheduling',
                               style: TextStyle(
                                 fontFamily: 'Kavoon',
                                 fontSize: 30,
